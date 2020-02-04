@@ -4,7 +4,11 @@ services:
     build: .
     restart: always
     labels:
-      - "traefik.http.middlewares.auth.basicauth.users=$TETRA_USERNAME:$TETRA_PASSWORD"
+      # password hashed according to https://docs.traefik.io/middlewares/basicauth/#general
+      # so: `htpasswd -nb -B <username> <password>` and escaped `$` signs (as `$$`)
+      - "traefik.http.routers.tetra-automation-api.rule=PathPrefix(`/api/projects/{project_id}/builds/{build_id}/results`)"
+      - "traefik.http.middlewares.basicauth.basicauth.users=$TETRA_USERNAME:$TETRA_PASSWORD"
+      - "traefik.http.routers.tetra-automation-api.middlewares=api-stripprefix,basicauth"
   worker:
     build: .
     restart: always
@@ -15,8 +19,4 @@ services:
   ui:
     build:
       context: ./ui
-    restart: always
-    labels:
-      - "traefik.http.services.frontend.loadbalancer.server.port=80"
-  gateway:
     restart: always

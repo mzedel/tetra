@@ -4,6 +4,17 @@ services:
     build: .
     volumes:
       - .:/tetra
+    labels:
+      # password hashed according to https://docs.traefik.io/middlewares/basicauth/#general
+      # so: `htpasswd -nb -B <username> <password>` and escaped `$` signs (as `$$`)
+      # here username:password are test:test
+      - "traefik.http.middlewares.auth.basicauth.users=test:$$apr1$$H6uskkkW$$IgXLP6ewTrSuBkTrqE8wj/"
+      - "traefik.http.routers.tetra-api.rule=PathPrefix(`/api/`)"
+      - "traefik.http.routers.tetra-api.middlewares=api-stripprefix,auth"
+      - "traefik.http.routers.tetra-automation-api.rule=PathPrefix(`/api/projects/{project_id}/builds/{build_id}/results`)"
+      # here username:password are test:different
+      - "traefik.http.middlewares.bauth.basicauth.users=test:$$2y$$05$$bJOpgyk0WkRrqHu0wBPB/eX9W.NSqxFV/CtmEaZ8eWwEzup7Knq8."
+      - "traefik.http.routers.tetra-automation-api.middlewares=api-stripprefix,bauth"
   worker:
     build: .
     volumes:
@@ -13,20 +24,31 @@ services:
       context: ./ui
       dockerfile: Dockerfile.dev
     labels:
-        - "traefik.http.services.frontend.loadbalancer.server.port=80"
+      - "traefik.http.routers.tetra-ui.rule=PathPrefix(`/`)"
+      - "traefik.http.routers.tetra-ui.middlewares=auth"
     volumes:
       - ./ui/:/work
       - /work/node_modules
       - /work/dist
   gateway:
+    image: traefik:v2.1
+    container_name: tetra-gateway
     # Enables the web UI and tells Traefik to listen to docker
     command:
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
-      - "--entrypoints.web.address=:80"
+      - "--entrypoints.http.address=:80"
       - "--api.insecure=true"
       - "--log.filePath=`/home/traefik.log`"
       - "--accesslog=true"
     ports:
+      # The HTTP port
+      - "80:80"
       # The Web UI (enabled by --api.insecure=true)
-      - "8888:8080"
+      - "8080:8080"
+    volumes:
+      # So that Traefik can listen to the Docker events
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+    depends_on:
+      - ui
+      - api

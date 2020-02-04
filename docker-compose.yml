@@ -11,14 +11,11 @@ services:
       bash -c "export PYTHONUNBUFFERED=1 && gunicorn --reload -t 120 --bind 0.0.0.0:7374 --access-logfile - tetra.app:application"
     labels:
       - "traefik.enable=true"
-      # password hashed according to https://docs.traefik.io/middlewares/basicauth/#general
-      # so: `htpasswd -nb -B <username> <password>` and escaped `$` signs (as `$$`)
-      - "traefik.http.middlewares.auth.basicauth.users=test:$$apr1$$H6uskkkW$$IgXLP6ewTrSuBkTrqE8wj/"
       - "traefik.http.middlewares.api-stripprefix.stripprefix.prefixes=/api/"
-      - "traefik.http.routers.backend.entrypoints=web"
-      - "traefik.http.routers.backend.rule=PathPrefix(`/api/`)"
-      - "traefik.http.routers.backend.middlewares=api-stripprefix,auth"
-      - "traefik.http.services.backend.loadbalancer.server.port=7374"
+      - "traefik.http.routers.tetra-api.entrypoints=http"
+      - "traefik.http.routers.tetra-api.rule=Host(`qastatus.mender.io`) && PathPrefix(`/api/`)"
+      - "traefik.http.routers.tetra-api.middlewares=api-stripprefix,oauth"
+      - "traefik.http.services.tetra-api.loadbalancer.server.port=7374"
   worker:
     image: tetra-api
     container_name: tetra-worker
@@ -55,23 +52,9 @@ services:
       - api
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.frontend.entrypoints=web"
-      - "traefik.http.routers.frontend.rule=PathPrefix(`/`)"
-      - "traefik.http.routers.frontend.middlewares=auth"
+      - "traefik.http.routers.tetra-ui.entrypoints=http"
+      - "traefik.http.routers.tetra-ui.rule=Host(`qastatus.mender.io`)"
+      - "traefik.http.routers.tetra-ui.middlewares=oauth"
+      - "traefik.http.services.tetra-ui.loadbalancer.server.port=80"
   gateway:
-    image: traefik:v2.0
-    container_name: tetra-gateway
-    # Enables the web UI and tells Traefik to listen to docker
-    command:
-      - "--providers.docker=true"
-      - "--providers.docker.exposedbydefault=false"
-      - "--entrypoints.web.address=:80"
-    ports:
-      # The HTTP port
-      - "80:80"
-    volumes:
-      # So that Traefik can listen to the Docker events
-      - "/var/run/docker.sock:/var/run/docker.sock:ro"
-    depends_on:
-      - ui
-      - api
+    image: busybox
